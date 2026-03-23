@@ -136,16 +136,37 @@ public class TerminateRestartPlugin: NSObject, FlutterPlugin {
             return
         }
         
+        // Get the existing engine (safe — we reuse it, no new engine creation)
+        let engine = flutterViewController.engine
+        
         // Return success before performing the restart
         result(true)
         
-        print("[TerminateRestart] Notifying Flutter to reset to root...")
+        // Disable user interaction during transition
+        window.isUserInteractionEnabled = false
         
-        // For UI-only restart, simply notify the Dart side to reset navigation
-        // This avoids the crash-prone approach of creating new engines
-        internalChannel?.invokeMethod("resetToRoot", arguments: nil)
+        print("[TerminateRestart] Recreating FlutterViewController with same engine...")
         
-        print("[TerminateRestart] UI restart completed")
+        // Create a new FlutterViewController with the SAME engine.
+        // This gives a proper visual restart without creating a new engine
+        // (which was the source of the old crash).
+        let newFlutterViewController = FlutterViewController(engine: engine, nibName: nil, bundle: nil)
+        
+        // Replace the root view controller with animation
+        UIView.transition(with: window,
+                         duration: 0.3,
+                         options: .transitionCrossDissolve,
+                         animations: {
+            window.rootViewController = newFlutterViewController
+        }) { _ in
+            // Re-enable user interaction
+            window.isUserInteractionEnabled = true
+            
+            // Notify Dart side to rebuild the widget tree from scratch
+            self.internalChannel?.invokeMethod("resetToRoot", arguments: nil)
+            
+            print("[TerminateRestart] UI restart completed")
+        }
     }
     
     /// Find the key window using a method compatible with all iOS versions

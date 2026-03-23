@@ -8,7 +8,7 @@ import 'package:terminate_restart/terminate_restart.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   TerminateRestart.instance.initialize();
-  runApp(const MyApp());
+  runApp(TerminateRestart.wrapWithRestart(child: const MyApp()));
 }
 
 class MyApp extends StatelessWidget {

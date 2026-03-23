@@ -2,27 +2,32 @@
 
 ### New Features
 * **Web platform support**: Full restart functionality for web browsers (PR #10 by @dario-valles)
-  * Hard reload (terminate mode) and soft reload (UI-only mode)
+  * Page reload for both terminate and UI-only restart modes
   * Browser storage clearing: localStorage, sessionStorage, cookies, IndexedDB, Cache API
   * Configurable data preservation matching native API
+* **`wrapWithRestart` widget**: New `TerminateRestart.wrapWithRestart()` method that wraps your app to enable proper UI-only restart (`terminate: false`) with full widget tree rebuild
 
 ### Bug Fixes
 * **Fixed iOS crash** (Issue #9): Resolved crash on iOS when performing UI-only restart
-  * Removed crash-prone engine recreation approach (`destroyContext()` did not exist on `FlutterEngine`)
-  * Simplified UI-only restart to use method channel communication instead of creating new engines
+  * Removed crash-prone new engine creation approach (`destroyContext()` did not exist on `FlutterEngine`)
+  * UI-only restart now recreates `FlutterViewController` with the **same engine** (safe, no crash)
+  * Sends `resetToRoot` to Dart side to trigger full widget tree rebuild via `wrapWithRestart`
   * Replaced deprecated `keyWindow`/`windows` APIs with `connectedScenes` for iOS 13+
   * Fixed keychain clearing query that prevented proper deletion
   * Added specific error codes and messages for better debugging
-* **Fixed duplicate class definitions**: Removed conflicting `TerminateRestartOptions`, `RestartMode`, and `TerminateRestart` class definitions from `terminate_restart_base.dart` that caused compile conflicts
+* **Fixed web double-tap issue**: `location.replace(sameUrl)` doesn't trigger a reload in most browsers — now uses `location.reload()` for both modes with `scheduleMicrotask` for immediate response
+* **Fixed duplicate class definitions**: Removed conflicting `TerminateRestartOptions`, `RestartMode`, and `TerminateRestart` class definitions from `terminate_restart_base.dart`
 * **Fixed podspec version mismatch**: Synced podspec version with pubspec
+* **Fixed Android dead code**: Removed unreachable engine recreation code that ran on a finishing Activity
 
 ### Improvements
-* Migrated `restartApp` to use platform interface pattern instead of direct `MethodChannel` for cleaner architecture
+* Migrated `restartApp` to use platform interface pattern instead of direct `MethodChannel`
 * Updated iOS minimum deployment target from 10.0 to 12.0
-* Added working unit tests (previously 100% commented out)
+* Added 7 working unit tests (previously 100% commented out)
 * Added `gc` method handler in iOS plugin
 * Added `kIsWeb` guard for internal method channel setup
-* Better error reporting with specific `FlutterError` codes on iOS
+* Cleaned up unused Android imports (`AlarmManager`, `PendingIntent`, `Process`, `exitProcess`)
+* Updated example app to use `wrapWithRestart` and upgraded `google_fonts` to 6.3.3 for Flutter 3.38+ web compatibility
 
 ## 1.0.10
 

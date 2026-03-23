@@ -88,7 +88,8 @@ import 'package:terminate_restart/terminate_restart.dart';
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   TerminateRestart.instance.initialize();
-  runApp(MyApp());
+  // Wrap your app with wrapWithRestart to enable UI-only restart
+  runApp(TerminateRestart.wrapWithRestart(child: MyApp()));
 }
 ```
 
@@ -126,6 +127,7 @@ await TerminateRestart.instance.restartAppWithConfirmation(
 | Data Clearing | Optional storage clearing with keychain preservation |
 | Confirmation | Optional user confirmation before restart |
 | iOS Compliance | System-approved methods for App Store compliance |
+| Web Support | Page reload with browser storage clearing |
 
 ## iOS App Store Compliance
 

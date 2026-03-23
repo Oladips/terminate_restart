@@ -1,13 +1,10 @@
 package com.ahmedsleem.terminate_restart
 
 import android.app.Activity
-import android.app.AlarmManager
-import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Handler
 import android.os.Looper
-import android.os.Process
 import android.util.Log
 import androidx.annotation.NonNull
 import io.flutter.embedding.engine.FlutterEngine
@@ -19,7 +16,6 @@ import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler
 import io.flutter.plugin.common.MethodChannel.Result
-import kotlin.system.exitProcess
 import java.io.File
 
 /** TerminateRestartPlugin */
@@ -207,47 +203,10 @@ class TerminateRestartPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
                 // Return success before restarting
                 result.success(true)
 
-                // Start new activity
+                // Start a fresh activity instance and finish the current one.
+                // The new activity creates its own Flutter engine automatically.
                 currentActivity.startActivity(intent)
                 currentActivity.finish()
-
-                // Force recreate the Flutter engine
-                Handler(Looper.getMainLooper()).postDelayed({
-                    try {
-                        // Get the Flutter activity
-                        val flutterActivity = currentActivity as? io.flutter.embedding.android.FlutterActivity
-                        
-                        if (flutterActivity != null) {
-                            // Create and configure the new engine
-                            val newEngine = FlutterEngine(context)
-                            newEngine.dartExecutor.executeDartEntrypoint(DartExecutor.DartEntrypoint.createDefault())
-
-                            // Register plugins using FlutterPluginRegistrant
-                            try {
-                                val registrantClass = Class.forName("io.flutter.plugins.GeneratedPluginRegistrant")
-                                val registerMethod = registrantClass.getMethod("registerWith", FlutterEngine::class.java)
-                                registerMethod.invoke(null, newEngine)
-                            } catch (e: Exception) {
-                                Log.e(TAG, "Error registering plugins: $e")
-                            }
-
-                            // Register our plugin with the new engine
-                            val channel = MethodChannel(newEngine.dartExecutor.binaryMessenger, "com.ahmedsleem.terminate_restart/restart")
-                            val internalChannel = MethodChannel(newEngine.dartExecutor.binaryMessenger, "com.ahmedsleem.terminate_restart/internal")
-                            
-                            // Set the new engine using reflection since the property is protected
-                            try {
-                                val engineField = io.flutter.embedding.android.FlutterActivity::class.java.getDeclaredField("flutterEngine")
-                                engineField.isAccessible = true
-                                engineField.set(flutterActivity, newEngine)
-                            } catch (e: Exception) {
-                                Log.e(TAG, "Error setting new Flutter engine: $e")
-                            }
-                        }
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Error during engine recreation: $e")
-                    }
-                }, 100)
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error during restart: $e")

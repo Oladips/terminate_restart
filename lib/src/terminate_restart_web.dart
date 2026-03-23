@@ -36,20 +36,13 @@ class TerminateRestartWeb extends TerminateRestartPlatform {
         );
       }
 
-      // Schedule the reload to happen after the current execution context
-      // This allows the Future to complete before the page reloads
-      Timer(const Duration(milliseconds: 100), () {
-        // For web, both terminate and non-terminate modes result in a page reload
-        // The difference is that terminate=true does a hard reload (bypasses cache)
-        if (terminate) {
-          // Hard reload - bypasses cache
-          web.window.location.reload();
-        } else {
-          // Soft reload - may use cache
-          // Navigate to current URL to simulate UI-only restart
-          final currentUrl = web.window.location.href;
-          web.window.location.replace(currentUrl);
-        }
+      // Use a microtask to allow the Future to return before the page reloads
+      scheduleMicrotask(() {
+        // On web, both modes use location.reload() since the browser
+        // cannot distinguish between UI-only and full restart.
+        // location.replace(sameUrl) does NOT trigger a reload in most browsers,
+        // which is why we always use reload().
+        web.window.location.reload();
       });
 
       return true;
