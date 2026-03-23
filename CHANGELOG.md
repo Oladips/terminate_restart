@@ -1,3 +1,29 @@
+## 1.1.0
+
+### New Features
+* **Web platform support**: Full restart functionality for web browsers (PR #10 by @dario-valles)
+  * Hard reload (terminate mode) and soft reload (UI-only mode)
+  * Browser storage clearing: localStorage, sessionStorage, cookies, IndexedDB, Cache API
+  * Configurable data preservation matching native API
+
+### Bug Fixes
+* **Fixed iOS crash** (Issue #9): Resolved crash on iOS when performing UI-only restart
+  * Removed crash-prone engine recreation approach (`destroyContext()` did not exist on `FlutterEngine`)
+  * Simplified UI-only restart to use method channel communication instead of creating new engines
+  * Replaced deprecated `keyWindow`/`windows` APIs with `connectedScenes` for iOS 13+
+  * Fixed keychain clearing query that prevented proper deletion
+  * Added specific error codes and messages for better debugging
+* **Fixed duplicate class definitions**: Removed conflicting `TerminateRestartOptions`, `RestartMode`, and `TerminateRestart` class definitions from `terminate_restart_base.dart` that caused compile conflicts
+* **Fixed podspec version mismatch**: Synced podspec version with pubspec
+
+### Improvements
+* Migrated `restartApp` to use platform interface pattern instead of direct `MethodChannel` for cleaner architecture
+* Updated iOS minimum deployment target from 10.0 to 12.0
+* Added working unit tests (previously 100% commented out)
+* Added `gc` method handler in iOS plugin
+* Added `kIsWeb` guard for internal method channel setup
+* Better error reporting with specific `FlutterError` codes on iOS
+
 ## 1.0.10
 
 * Fixed Swift compiler error in Xcode 16.2 with Flutter 3.29.0:

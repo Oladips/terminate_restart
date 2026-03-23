@@ -1,93 +1,124 @@
-// // import 'package:flutter/material.dart';
-// import 'package:flutter_test/flutter_test.dart';
-// import 'package:terminate_restart/terminate_restart.dart';
-// // import 'package:terminate_restart/terminate_restart_platform_interface.dart';
-// import 'package:plugin_platform_interface/plugin_platform_interface.dart';
-//
-// class MockTerminateRestartPlatform
-//     with MockPlatformInterfaceMixin
-//     implements TerminateRestartPlatform {
-//   bool wasRestartCalled = false;
-//   bool shouldSucceed = true;
-//   Map<String, dynamic>? lastRestartArguments;
-//
-//   @override
-//   Future<bool> restartApp({
-//     bool clearData = false,
-//     bool preserveKeychain = false,
-//     bool preserveUserDefaults = false,
-//     bool terminate = true,
-//   }) async {
-//     if (!shouldSucceed) {
-//       throw Exception('Mock platform error');
-//     }
-//
-//     wasRestartCalled = true;
-//     lastRestartArguments = {
-//       'clearData': clearData,
-//       'preserveKeychain': preserveKeychain,
-//       'preserveUserDefaults': preserveUserDefaults,
-//       'terminate': terminate,
-//     };
-//     return shouldSucceed;
-//   }
-// }
-//
-// void main() {
-//   TestWidgetsFlutterBinding.ensureInitialized();
-//   late MockTerminateRestartPlatform mockPlatform;
-//
-//   setUp(() {
-//     mockPlatform = MockTerminateRestartPlatform();
-//     TerminateRestartPlatform.instance = mockPlatform;
-//     TerminateRestart.instance.initialize();
-//   });
-//
-//   group('TerminateRestart', () {
-//     testWidgets('restartApp with default values', (tester) async {
-//       final success = await TerminateRestart.instance.restartApp(
-//         options: const TerminateRestartOptions(),
-//       );
-//
-//       expect(mockPlatform.wasRestartCalled, true);
-//       expect(mockPlatform.lastRestartArguments, {
-//         'clearData': false,
-//         'preserveKeychain': false,
-//         'preserveUserDefaults': false,
-//         'terminate': true,
-//       });
-//       expect(success, true);
-//     });
-//
-//     testWidgets('restartApp with custom values', (tester) async {
-//       final success = await TerminateRestart.instance.restartApp(
-//         options: const TerminateRestartOptions(
-//           clearData: true,
-//           preserveKeychain: true,
-//           preserveUserDefaults: true,
-//           terminate: false,
-//         ),
-//       );
-//
-//       expect(mockPlatform.wasRestartCalled, true);
-//       expect(mockPlatform.lastRestartArguments, {
-//         'clearData': true,
-//         'preserveKeychain': true,
-//         'preserveUserDefaults': true,
-//         'terminate': false,
-//       });
-//       expect(success, true);
-//     });
-//
-//     testWidgets('restartApp handles failure', (tester) async {
-//       mockPlatform.shouldSucceed = false;
-//
-//       expect(
-//         () => TerminateRestart.instance.restartApp(
-//           options: const TerminateRestartOptions(),
-//         ),
-//         throwsException,
-//       );
-//     });
-//   });
-// }
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:terminate_restart/terminate_restart.dart';
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  group('TerminateRestartOptions', () {
+    test('default values', () {
+      const options = TerminateRestartOptions();
+
+      expect(options.terminate, true);
+      expect(options.clearData, false);
+      expect(options.preserveKeychain, false);
+      expect(options.preserveUserDefaults, false);
+    });
+
+    test('custom values', () {
+      const options = TerminateRestartOptions(
+        terminate: false,
+        clearData: true,
+        preserveKeychain: true,
+        preserveUserDefaults: true,
+      );
+
+      expect(options.terminate, false);
+      expect(options.clearData, true);
+      expect(options.preserveKeychain, true);
+      expect(options.preserveUserDefaults, true);
+    });
+  });
+
+  group('TerminateRestart', () {
+    late List<MethodCall> log;
+
+    setUp(() {
+      log = <MethodCall>[];
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+        const MethodChannel('com.ahmedsleem.terminate_restart/restart'),
+        (MethodCall methodCall) async {
+          log.add(methodCall);
+          return true;
+        },
+      );
+    });
+
+    tearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+        const MethodChannel('com.ahmedsleem.terminate_restart/restart'),
+        null,
+      );
+    });
+
+    test('singleton instance', () {
+      final instance1 = TerminateRestart.instance;
+      final instance2 = TerminateRestart.instance;
+
+      expect(identical(instance1, instance2), true);
+    });
+
+    test('restartApp calls platform with correct arguments', () async {
+      final result = await TerminateRestart.instance.restartApp(
+        options: const TerminateRestartOptions(
+          terminate: true,
+          clearData: true,
+          preserveKeychain: false,
+          preserveUserDefaults: true,
+        ),
+      );
+
+      expect(result, true);
+      expect(log.length, 1);
+      expect(log[0].method, 'restart');
+      expect(log[0].arguments, {
+        'terminate': true,
+        'clearData': true,
+        'preserveKeychain': false,
+        'preserveUserDefaults': true,
+      });
+    });
+
+    test('restartApp with default options', () async {
+      final result = await TerminateRestart.instance.restartApp(
+        options: const TerminateRestartOptions(),
+      );
+
+      expect(result, true);
+      expect(log.length, 1);
+      expect(log[0].method, 'restart');
+      expect(log[0].arguments, {
+        'terminate': true,
+        'clearData': false,
+        'preserveKeychain': false,
+        'preserveUserDefaults': false,
+      });
+    });
+
+    test('restartApp handles platform exception', () async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+        const MethodChannel('com.ahmedsleem.terminate_restart/restart'),
+        (MethodCall methodCall) async {
+          throw PlatformException(code: 'ERROR', message: 'Test error');
+        },
+      );
+
+      final result = await TerminateRestart.instance.restartApp(
+        options: const TerminateRestartOptions(),
+      );
+
+      expect(result, false);
+    });
+  });
+
+  group('RestartMode', () {
+    test('has correct values', () {
+      expect(RestartMode.values.length, 2);
+      expect(RestartMode.immediate.index, 0);
+      expect(RestartMode.withConfirmation.index, 1);
+    });
+  });
+}

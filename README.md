@@ -54,6 +54,7 @@ A robust Flutter plugin for terminating and restarting your app with extensive c
 - **Platform Support**:
   - Android: Full support with activity recreation
   - iOS: Compliant with App Store guidelines
+  - Web: Page reload with browser storage clearing
 
 - **User Experience**:
   - Built-in confirmation dialogs
@@ -64,7 +65,7 @@ A robust Flutter plugin for terminating and restarting your app with extensive c
 
 ```yaml
 dependencies:
-  terminate_restart: ^1.0.10
+  terminate_restart: ^1.1.0
 ```
 
 ## Quick Start
@@ -74,7 +75,7 @@ Get up and running with Terminate Restart in minutes:
 1. **Add Dependency**
 ```yaml
 dependencies:
-  terminate_restart: ^1.0.10
+  terminate_restart: ^1.1.0
 ```
 
 2. **Import Package**

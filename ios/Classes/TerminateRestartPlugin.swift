@@ -2,9 +2,12 @@ import Flutter
 import UIKit
 
 public class TerminateRestartPlugin: NSObject, FlutterPlugin {
+    private var internalChannel: FlutterMethodChannel?
+    
     public static func register(with registrar: FlutterPluginRegistrar) {
         let channel = FlutterMethodChannel(name: "com.ahmedsleem.terminate_restart/restart", binaryMessenger: registrar.messenger())
         let instance = TerminateRestartPlugin()
+        instance.internalChannel = FlutterMethodChannel(name: "com.ahmedsleem.terminate_restart/internal", binaryMessenger: registrar.messenger())
         registrar.addMethodCallDelegate(instance, channel: channel)
     }
     
@@ -12,6 +15,8 @@ public class TerminateRestartPlugin: NSObject, FlutterPlugin {
         switch call.method {
         case "restart":
             handleRestartApp(call, result: result)
+        case "gc":
+            result(nil)
         default:
             result(FlutterMethodNotImplemented)
         }
@@ -27,150 +32,139 @@ public class TerminateRestartPlugin: NSObject, FlutterPlugin {
             return
         }
         
-        print(" [TerminateRestart] Starting restart with clearData: \(clearData), terminate: \(terminate)")
+        print("[TerminateRestart] Starting restart with clearData: \(clearData), terminate: \(terminate)")
         
-        // Return success early to allow Flutter to clean up
-        result(true)
-        
-        // Perform restart with data clearing if needed
         if clearData {
-            print(" [TerminateRestart] Starting data clearing...")
+            print("[TerminateRestart] Starting data clearing...")
             clearAppData(preserveKeychain: preserveKeychain,
                         preserveUserDefaults: preserveUserDefaults) { [weak self] success, error in
                 if let error = error {
-                    print(" [TerminateRestart] Data clearing failed: \(error)")
+                    print("[TerminateRestart] Data clearing failed: \(error)")
+                    result(FlutterError(code: "DATA_CLEAR_ERROR", message: error.localizedDescription, details: nil))
                     return
                 }
-                print(" [TerminateRestart] Data clearing completed successfully")
+                print("[TerminateRestart] Data clearing completed successfully")
                 DispatchQueue.main.async {
-                    self?.performRestart(terminate: terminate)
+                    self?.performRestart(terminate: terminate, result: result)
                 }
             }
         } else {
-            performRestart(terminate: terminate)
+            performRestart(terminate: terminate, result: result)
         }
     }
     
-    private func performRestart(terminate: Bool) {
+    private func performRestart(terminate: Bool, result: @escaping FlutterResult) {
         // Ensure we're on the main thread
         if !Thread.isMainThread {
             DispatchQueue.main.async { [weak self] in
-                self?.performRestart(terminate: terminate)
+                self?.performRestart(terminate: terminate, result: result)
             }
             return
         }
         
         if terminate {
-            // Create a new instance of the app
-            if let bundleId = Bundle.main.bundleIdentifier {
-                let url = URL(string: "\(bundleId)://")!
-                
-                // Save state indicating we're performing a restart
-                UserDefaults.standard.set(true, forKey: "TerminateRestart_IsRestarting")
-                UserDefaults.standard.synchronize()
-                
-                print(" [TerminateRestart] Opening app URL: \(url)")
-                
-                if UIApplication.shared.canOpenURL(url) {
-                    UIApplication.shared.open(url, options: [:]) { success in
-                        if !success {
-                            print(" [TerminateRestart] Failed to open app URL")
-                        }
-                    }
-                    
-                    print(" [TerminateRestart] Terminating app...")
-                    // Force suspend the app
-                    UIControl().sendAction(#selector(URLSessionTask.suspend), to: UIApplication.shared, for: nil)
-                    
-                    // Exit after a delay to ensure URL opening completes
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                        exit(0)
-                    }
-                } else {
-                    print(" [TerminateRestart] Error: Cannot open app URL")
-                }
-            } else {
-                print(" [TerminateRestart] Error: No bundle ID found")
-            }
+            performTerminateRestart(result: result)
         } else {
-            print(" [TerminateRestart] Performing UI-only restart...")
-            
-            guard let window = UIApplication.shared.keyWindow ?? UIApplication.shared.windows.first else {
-                print(" [TerminateRestart] Error: No window found")
-                return
+            performUIRestart(result: result)
+        }
+    }
+    
+    private func performTerminateRestart(result: @escaping FlutterResult) {
+        guard let bundleId = Bundle.main.bundleIdentifier else {
+            print("[TerminateRestart] Error: No bundle ID found")
+            result(FlutterError(code: "NO_BUNDLE_ID", message: "No bundle identifier found", details: nil))
+            return
+        }
+        
+        guard let url = URL(string: "\(bundleId)://") else {
+            print("[TerminateRestart] Error: Could not create URL")
+            result(FlutterError(code: "URL_ERROR", message: "Could not create app URL", details: nil))
+            return
+        }
+        
+        // Save state indicating we're performing a restart
+        UserDefaults.standard.set(true, forKey: "TerminateRestart_IsRestarting")
+        UserDefaults.standard.synchronize()
+        
+        print("[TerminateRestart] Opening app URL: \(url)")
+        
+        guard UIApplication.shared.canOpenURL(url) else {
+            print("[TerminateRestart] Error: Cannot open app URL. Make sure CFBundleURLTypes is configured in Info.plist")
+            result(FlutterError(code: "URL_SCHEME_ERROR",
+                                message: "Cannot open app URL. Configure CFBundleURLTypes with your bundle identifier in Info.plist",
+                                details: nil))
+            return
+        }
+        
+        // Return success before restarting
+        result(true)
+        
+        UIApplication.shared.open(url, options: [:]) { success in
+            if !success {
+                print("[TerminateRestart] Failed to open app URL")
             }
-            
-            guard let rootViewController = window.rootViewController else {
-                print(" [TerminateRestart] Error: No root controller found")
-                return
-            }
-            
-            guard let flutterViewController = rootViewController as? FlutterViewController else {
-                print(" [TerminateRestart] Error: Root controller is not FlutterViewController")
-                return
-            }
-            
-            print(" [TerminateRestart] Creating new Flutter view controller")
-            
-            // Disable user interaction during transition
-            window.isUserInteractionEnabled = false
-            
-            // Get the Flutter engine
-            let flutterEngine = flutterViewController.engine
-            
-            // Create a new engine
-            let newEngine = FlutterEngine(name: "restart_engine")
-            guard newEngine.run() else {
-                print(" [TerminateRestart] Error: Failed to run new engine")
-                return
-            }
-            
-            // Create a new Flutter view controller with the new engine
-            let newFlutterViewController = FlutterViewController(engine: newEngine, nibName: nil, bundle: nil)
-            
-            // Register plugins using FlutterPluginRegistrant
-            if let registrantClass = NSClassFromString("GeneratedPluginRegistrant") as? NSObject.Type {
-                let registrant = registrantClass.init()
-                if registrant.responds(to: Selector(("registerWithRegistry:"))) {
-                    registrant.perform(Selector(("registerWithRegistry:")), with: newEngine)
-                }
-            }
-            
-            // Set up method channels on the new engine
-            let channel = FlutterMethodChannel(name: "com.ahmedsleem.terminate_restart/restart", binaryMessenger: newEngine.binaryMessenger)
-            let internalChannel = FlutterMethodChannel(name: "com.ahmedsleem.terminate_restart/internal", binaryMessenger: newEngine.binaryMessenger)
-            
-            // Register our plugin with the new engine
-            if let registrar = newEngine.registrar(forPlugin: "TerminateRestartPlugin") {
-                let instance = TerminateRestartPlugin()
-                registrar.addMethodCallDelegate(instance, channel: channel)
-            }
-            
-            // Perform the view controller replacement with animation
-            UIView.transition(with: window,
-                            duration: 0.3,
-                            options: .transitionCrossDissolve,
-                            animations: {
-                // Remove old view controller
-                flutterViewController.willMove(toParent: nil)
-                flutterViewController.view.removeFromSuperview()
-                flutterViewController.removeFromParent()
-                
-                // Set new view controller
-                window.rootViewController = newFlutterViewController
-            }) { _ in
-                // Re-enable user interaction
-                window.isUserInteractionEnabled = true
-                
-                // Clean up old engine
-                flutterEngine.destroyContext()
-                
-                // Reset navigation on new engine
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    internalChannel.invokeMethod("resetToRoot", arguments: nil)
-                    print(" [TerminateRestart] UI restart completed")
-                }
-            }
+        }
+        
+        print("[TerminateRestart] Terminating app...")
+        // Force suspend the app
+        UIControl().sendAction(#selector(URLSessionTask.suspend), to: UIApplication.shared, for: nil)
+        
+        // Exit after a delay to ensure URL opening completes
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            exit(0)
+        }
+    }
+    
+    private func performUIRestart(result: @escaping FlutterResult) {
+        print("[TerminateRestart] Performing UI-only restart...")
+        
+        guard let window = Self.findKeyWindow() else {
+            print("[TerminateRestart] Error: No window found")
+            result(FlutterError(code: "NO_WINDOW", message: "No window found", details: nil))
+            return
+        }
+        
+        guard let rootViewController = window.rootViewController else {
+            print("[TerminateRestart] Error: No root controller found")
+            result(FlutterError(code: "NO_ROOT_VC", message: "No root view controller found", details: nil))
+            return
+        }
+        
+        guard let flutterViewController = rootViewController as? FlutterViewController else {
+            print("[TerminateRestart] Error: Root controller is not FlutterViewController")
+            result(FlutterError(code: "NOT_FLUTTER_VC", message: "Root view controller is not a FlutterViewController", details: nil))
+            return
+        }
+        
+        // Return success before performing the restart
+        result(true)
+        
+        print("[TerminateRestart] Notifying Flutter to reset to root...")
+        
+        // For UI-only restart, simply notify the Dart side to reset navigation
+        // This avoids the crash-prone approach of creating new engines
+        internalChannel?.invokeMethod("resetToRoot", arguments: nil)
+        
+        print("[TerminateRestart] UI restart completed")
+    }
+    
+    /// Find the key window using a method compatible with all iOS versions
+    private static func findKeyWindow() -> UIWindow? {
+        if #available(iOS 15.0, *) {
+            // iOS 15+: use connectedScenes
+            return UIApplication.shared.connectedScenes
+                .compactMap { $0 as? UIWindowScene }
+                .flatMap { $0.windows }
+                .first { $0.isKeyWindow }
+        } else if #available(iOS 13.0, *) {
+            // iOS 13-14: use connectedScenes with windows
+            return UIApplication.shared.connectedScenes
+                .compactMap { $0 as? UIWindowScene }
+                .flatMap { $0.windows }
+                .first { $0.isKeyWindow }
+        } else {
+            // iOS 12 and below
+            return UIApplication.shared.keyWindow
         }
     }
     
@@ -181,7 +175,7 @@ public class TerminateRestartPlugin: NSObject, FlutterPlugin {
         clearQueue.async {
             var clearError: Error?
             
-            print(" [TerminateRestart] Clearing UserDefaults...")
+            print("[TerminateRestart] Clearing UserDefaults...")
             // Clear UserDefaults if not preserved
             if !preserveUserDefaults {
                 if let bundleId = Bundle.main.bundleIdentifier {
@@ -190,7 +184,7 @@ public class TerminateRestartPlugin: NSObject, FlutterPlugin {
                 }
             }
             
-            print(" [TerminateRestart] Clearing Keychain...")
+            print("[TerminateRestart] Clearing Keychain...")
             // Clear Keychain if not preserved
             if !preserveKeychain {
                 let secItemClasses: [CFString] = [
@@ -202,18 +196,15 @@ public class TerminateRestartPlugin: NSObject, FlutterPlugin {
                 ]
                 
                 for itemClass in secItemClasses {
-                    let spec: [String: Any] = [
-                        kSecClass as String: itemClass,
-                        kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock
-                    ]
+                    let spec: [String: Any] = [kSecClass as String: itemClass]
                     let status = SecItemDelete(spec as CFDictionary)
                     if status != errSecSuccess && status != errSecItemNotFound {
-                        print(" [TerminateRestart] Error clearing keychain item: \(status)")
+                        print("[TerminateRestart] Error clearing keychain item: \(status)")
                     }
                 }
             }
             
-            print(" [TerminateRestart] Clearing files...")
+            print("[TerminateRestart] Clearing files...")
             // Clear files synchronously
             do {
                 let fileManager = FileManager.default
@@ -225,7 +216,7 @@ public class TerminateRestartPlugin: NSObject, FlutterPlugin {
                         do {
                             try fileManager.removeItem(at: fileUrl)
                         } catch {
-                            print(" [TerminateRestart] Error clearing document file \(fileUrl.lastPathComponent): \(error)")
+                            print("[TerminateRestart] Error clearing document file \(fileUrl.lastPathComponent): \(error)")
                         }
                     }
                 }
@@ -237,7 +228,7 @@ public class TerminateRestartPlugin: NSObject, FlutterPlugin {
                         do {
                             try fileManager.removeItem(at: fileUrl)
                         } catch {
-                            print(" [TerminateRestart] Error clearing cache file \(fileUrl.lastPathComponent): \(error)")
+                            print("[TerminateRestart] Error clearing cache file \(fileUrl.lastPathComponent): \(error)")
                         }
                     }
                 }
@@ -250,15 +241,15 @@ public class TerminateRestartPlugin: NSObject, FlutterPlugin {
                     do {
                         try fileManager.removeItem(atPath: filePath)
                     } catch {
-                        print(" [TerminateRestart] Error clearing temp file \(file): \(error)")
+                        print("[TerminateRestart] Error clearing temp file \(file): \(error)")
                     }
                 }
             } catch {
-                print(" [TerminateRestart] Error accessing directories: \(error)")
+                print("[TerminateRestart] Error accessing directories: \(error)")
                 clearError = error
             }
             
-            print(" [TerminateRestart] Clearing cookies and cache...")
+            print("[TerminateRestart] Clearing cookies and cache...")
             // Clear cookies and cache
             if let cookies = HTTPCookieStorage.shared.cookies {
                 for cookie in cookies {
@@ -267,7 +258,7 @@ public class TerminateRestartPlugin: NSObject, FlutterPlugin {
             }
             URLCache.shared.removeAllCachedResponses()
             
-            print(" [TerminateRestart] All data clearing operations completed")
+            print("[TerminateRestart] All data clearing operations completed")
             // Call completion on main queue
             DispatchQueue.main.async {
                 completion(clearError == nil, clearError)
