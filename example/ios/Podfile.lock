@@ -6,7 +6,7 @@ PODS:
   - shared_preferences_foundation (0.0.1):
     - Flutter
     - FlutterMacOS
-  - terminate_restart (1.0.9):
+  - terminate_restart (1.1.0):
     - Flutter
 
 DEPENDENCIES:
@@ -26,11 +26,11 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/terminate_restart/ios"
 
 SPEC CHECKSUMS:
-  Flutter: e0871f40cf51350855a761d2e70bf5af5b9b5de7
-  path_provider_foundation: 080d55be775b7414fd5a5ef3ac137b97b097e564
-  shared_preferences_foundation: 9e1978ff2562383bd5676f64ec4e9aa8fa06a6f7
-  terminate_restart: 7afc8cc5b5afc86871cdb1206a584c43262702ac
+  Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
+  path_provider_foundation: 2b6b4c569c0fb62ec74538f866245ac84301af46
+  shared_preferences_foundation: fcdcbc04712aee1108ac7fda236f363274528f78
+  terminate_restart: 5d411a57d613e9c718ea63cfa9f00c86d023efd4
 
-PODFILE CHECKSUM: 7be2f5f74864d463a8ad433546ed1de7e0f29aef
+PODFILE CHECKSUM: a57f30d18f102dd3ce366b1d62a55ecbef2158e5
 
 COCOAPODS: 1.16.2
